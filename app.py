@@ -144,24 +144,30 @@ TOOLS_SCHEMA = [
 ]
 
 # --- LOAD MODEL (CACHED) ---
+import multiprocessing
+
 @st.cache_resource
 def load_llm():
-    """
-    Load model GGUF ke RAM sekali saja.
-    Menggunakan llama-cpp-python untuk inferensi CPU yang efisien.
-    """
     if not os.path.exists(MODEL_PATH):
         st.error(f"Model file tidak ditemukan di: {MODEL_PATH}")
         st.stop()
     
     st.toast("Memuat model AI ke Memori...", icon="🧠")
+    
+    # HITUNG THREADS OPTIMAL
+    # Gunakan physical cores jika memungkinkan, sisakan 2 untuk System/UI
+    total_cores = multiprocessing.cpu_count()
+    optimal_threads = max(1, total_cores - 2) 
+
     try:
-        # n_gpu_layers=0 artinya full CPU
         llm = Llama(
             model_path=MODEL_PATH,
-            n_ctx=N_CTX,
-            n_gpu_layers=0, 
-            verbose=False
+            n_ctx=4096,          # Context window aman untuk laptop
+            n_batch=1024,        # [OPTIMASI] Mempercepat pembacaan prompt panjang (schema)
+            n_threads=optimal_threads, # [OPTIMASI] Agar UI tidak freeze
+            n_gpu_layers=0,      # Force CPU
+            verbose=False,       # Matikan log spam di terminal
+            use_mlock=True       # [OPTIMASI] Kunci model di RAM agar tidak swap ke disk (lebih stabil)
         )
         return llm
     except Exception as e:
@@ -191,14 +197,18 @@ class LocalLLMProcessor:
         # Inference parameter (Optimasi untuk CPU: temperature rendah biar cepat & pasti)
         output = self.llm(
             prompt,
-            max_tokens=512,
+            max_tokens=1024,      # [FIX] Dinaikkan dari 512 untuk mencegah JSON terpotong
             stop=["<end_function_call>", "<end_of_turn>"],
-            temperature=0.1, 
-            top_p=0.9
+            temperature=0.0,      # [FIX] Greedy decoding untuk format JSON yang strict
+            top_p=1.0,            # [FIX] Tidak perlu sampling acak
+            top_k=40,             # Standard filtering
+            repeat_penalty=1.1,   # [FIX] Mencegah looping jika model bingung (cth: }}}}}})
+            echo=False
         )
         
         generated_text = output['choices'][0]['text']
-        # Tambahkan end tag manual untuk parsing jika terpotong
+        
+        # Safety net: Jika model lupa menutup tag (jarang terjadi di temp 0, tapi preventif)
         if "<start_function_call>" in generated_text and "<end_function_call>" not in generated_text:
             generated_text += "<end_function_call>"
             
