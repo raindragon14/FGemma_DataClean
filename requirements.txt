@@ -1,3 +1,4 @@
 streamlit
 pandas
 llama-cpp-python
+openpyxl
