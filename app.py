@@ -187,7 +187,7 @@ class LocalLLMProcessor:
         # Template ini krusial agar model sadar tools
         system_content = f"You are an expert Data Cleaning Assistant. available_columns: {list(df_columns)}. Tools:\n{json.dumps(TOOLS_SCHEMA)}"
         
-        prompt = f"""<start_of_turn>system
+        prompt = f"""<start_of_turn>developer
 {system_content}<end_of_turn>
 <start_of_turn>user
 {user_query}<end_of_turn>
@@ -199,9 +199,9 @@ class LocalLLMProcessor:
             prompt,
             max_tokens=1024,      # [FIX] Dinaikkan dari 512 untuk mencegah JSON terpotong
             stop=["<end_function_call>", "<end_of_turn>"],
-            temperature=0.0,      # [FIX] Greedy decoding untuk format JSON yang strict
-            top_p=1.0,            # [FIX] Tidak perlu sampling acak
-            top_k=40,             # Standard filtering
+            temperature=1.0,      # [FIX] Greedy decoding untuk format JSON yang strict
+            top_p=0.95,            # [FIX] Tidak perlu sampling acak
+            top_k=64,             # Standard filtering
             repeat_penalty=1.1,   # [FIX] Mencegah looping jika model bingung (cth: }}}}}})
             echo=False
         )
